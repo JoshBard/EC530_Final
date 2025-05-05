@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-import robot
+from .. import robot  # still your module
 
 class DummyConn:
     def __init__(self, data: bytes):
@@ -15,7 +15,10 @@ class DummyConn:
 @pytest.fixture(autouse=True)
 def in_memory_db(monkeypatch):
     # patch engine & Session to use an in‑memory SQLite database
-    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False}
+    )
     Session = sessionmaker(bind=engine)
     monkeypatch.setattr(robot, "engine", engine)
     monkeypatch.setattr(robot, "Session", Session)
@@ -29,8 +32,8 @@ def _make_robot_and_modules(session, module_statuses):
     Helper to insert one Robot plus one Module per status in module_statuses.
     module_statuses: list of strings, e.g. ["IDLE","RUNNING","FAILED"]
     """
-    # create a robot
-    r = robot.Robot(
+    # create a robot instance
+    bot = robot.Robot(
         name="TestBot",
         owner="alice",
         owner_email="alice@example.com",
@@ -40,7 +43,7 @@ def _make_robot_and_modules(session, module_statuses):
         port=9000,
         password="pw"
     )
-    session.add(r)
+    session.add(bot)
     session.commit()
 
     mods = []
@@ -49,30 +52,30 @@ def _make_robot_and_modules(session, module_statuses):
             name=f"mod{i}",
             type=robot.ModuleType.VISION,
             ip_address=f"10.0.0.{i}",
-            port=1000+i,
+            port=1000 + i,
             status=robot.StatusEnum[st],
-            robot_id=r.id
+            robot_id=bot.id
         )
         session.add(m)
         mods.append(m)
     session.commit()
-    return r, mods
+    return bot, mods
 
 def test_handle_client_with_failed_incoming_prints_alert_and_keeps_idle(monkeypatch, capsys):
     sess = robot.Session()
     # all modules currently IDLE
-    robot, mods = _make_robot_and_modules(sess, ["IDLE", "IDLE"])
+    bot, mods = _make_robot_and_modules(sess, ["IDLE", "IDLE"])
 
     payload = {"module_id": mods[0].id, "status": "FAILED"}
     conn = DummyConn(json.dumps(payload).encode())
 
     before = datetime.now(timezone.utc)
-    robot.handle_client(conn, robot.id)
+    robot.handle_client(conn, bot.id)
     after = datetime.now(timezone.utc)
 
     # reload robot
     sess2 = robot.Session()
-    updated = sess2.query(robot.Robot).get(robot.id)
+    updated = sess2.query(robot.Robot).get(bot.id)
 
     # since DB modules are both IDLE, robot.status stays IDLE
     assert updated.status == robot.StatusEnum.IDLE
@@ -88,15 +91,15 @@ def test_handle_client_with_failed_incoming_prints_alert_and_keeps_idle(monkeypa
 def test_handle_client_running_updates_to_running_without_alert(capsys):
     sess = robot.Session()
     # one module IDLE, one RUNNING
-    robot, mods = _make_robot_and_modules(sess, ["IDLE", "RUNNING"])
+    bot, mods = _make_robot_and_modules(sess, ["IDLE", "RUNNING"])
 
     payload = {"module_id": mods[0].id, "status": "IDLE"}  # incoming IDLE
     conn = DummyConn(json.dumps(payload).encode())
 
-    robot.handle_client(conn, robot.id)
+    robot.handle_client(conn, bot.id)
 
     sess2 = robot.Session()
-    updated = sess2.query(robot.Robot).get(robot.id)
+    updated = sess2.query(robot.Robot).get(bot.id)
 
     # because one module is RUNNING in the DB, robot.status → RUNNING
     assert updated.status == robot.StatusEnum.RUNNING
@@ -108,15 +111,15 @@ def test_handle_client_running_updates_to_running_without_alert(capsys):
 def test_handle_client_failed_in_db_updates_to_failed_without_alert(capsys):
     sess = robot.Session()
     # one module FAILED in DB, one IDLE
-    robot, mods = _make_robot_and_modules(sess, ["FAILED", "IDLE"])
+    bot, mods = _make_robot_and_modules(sess, ["FAILED", "IDLE"])
 
     payload = {"module_id": mods[1].id, "status": "RUNNING"}  # incoming RUNNING
     conn = DummyConn(json.dumps(payload).encode())
 
-    robot.handle_client(conn, robot.id)
+    robot.handle_client(conn, bot.id)
 
     sess2 = robot.Session()
-    updated = sess2.query(robot.Robot).get(robot.id)
+    updated = sess2.query(robot.Robot).get(bot.id)
 
     # because a module is FAILED in the DB, robot.status → FAILED
     assert updated.status == robot.StatusEnum.FAILED

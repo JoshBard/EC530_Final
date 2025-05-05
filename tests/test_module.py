@@ -2,11 +2,12 @@ import sys
 import uuid
 import json
 import pytest
+import builtins
 from datetime import datetime, timezone
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, clear_mappers
 
-import module
+from .. import module
 
 class DummyConn:
     def __init__(self, data: bytes):

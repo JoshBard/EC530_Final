@@ -5,8 +5,8 @@ import pytest
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import sessionmaker
 
-import module_creator
-import robot_creator
+from .. import module_creator
+from .. import robot_creator
 
 @pytest.fixture(autouse=True)
 def in_memory_dbs(monkeypatch):

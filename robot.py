@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import enum
 import uuid
 import threading
@@ -6,13 +8,11 @@ import json
 import getpass
 import sys
 from datetime import datetime, timezone
-
 from sqlalchemy import (
     create_engine, Column, String, Integer, Float,
-    DateTime, Enum as SAEnum, ForeignKey
+    DateTime, Enum as SAEnum, ForeignKey, event
 )
-from sqlalchemy.orm import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
 Base = declarative_base()
 
@@ -34,7 +34,11 @@ class Robot(Base):
     owner            = Column(String, nullable=False)
     owner_email      = Column(String, nullable=False)
     status           = Column(SAEnum(StatusEnum), default=StatusEnum.IDLE, nullable=False)
-    last_online      = Column(DateTime(timezone=True),default=lambda: datetime.now(timezone.utc).replace(microsecond=0),nullable=False)
+    last_online      = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc).replace(microsecond=0),
+        nullable=False
+    )
     power_level      = Column(Float, default=0.0)
     network_ssid     = Column(String, nullable=False)
     network_password = Column(String, nullable=False)
@@ -42,6 +46,12 @@ class Robot(Base):
     port             = Column(Integer, nullable=False)
     password         = Column(String, nullable=False)
     modules          = relationship("Module", back_populates="robot", cascade="all, delete-orphan")
+
+@event.listens_for(Robot, "load")
+def _attach_utc_tz_on_load(target: Robot, context):
+    lo = target.last_online
+    if lo is not None and lo.tzinfo is None:
+        target.last_online = lo.replace(tzinfo=timezone.utc)
 
 class Module(Base):
     __tablename__ = "modules"
@@ -100,8 +110,8 @@ def handle_client(conn, robot_id):
     sess = Session()
     raw = conn.recv(1024)
     try:
-        msg       = json.loads(raw.decode())
-        module_id = msg["module_id"]
+        msg             = json.loads(raw.decode())
+        module_id       = msg["module_id"]
         incoming_status = StatusEnum[msg["status"]]
     except Exception:
         sess.close()
@@ -120,9 +130,9 @@ def handle_client(conn, robot_id):
 
     # Update robot row
     robot = sess.query(Robot).get(robot_id)
-    now = datetime.now(timezone.utc).replace(microsecond=0)
     robot.status      = robot_status
-    robot.last_online = now
+    # <<<< use full-precision UTC timestamp here >>>>
+    robot.last_online = datetime.now(timezone.utc)
     sess.add(robot)
     sess.commit()
 

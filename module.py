@@ -1,7 +1,4 @@
-#!/usr/bin/env python3
-
 import sys
-import uuid
 import socket
 import json
 import enum
@@ -12,12 +9,11 @@ from sqlalchemy import (
     Column,
     String,
     Integer,
-    Float,
     DateTime,
     Enum as SAEnum,
     ForeignKey
 )
-from sqlalchemy.orm import sessionmaker, declarative_base, relationship
+from sqlalchemy.orm import sessionmaker, declarative_base
 
 Base = declarative_base()
 
@@ -45,74 +41,66 @@ class Module(Base):
     type        = Column(SAEnum(ModuleType), nullable=False)
     ip_address  = Column(String, nullable=False)
     port        = Column(Integer, nullable=False)
-    last_online = Column(DateTime(timezone=True))
-    status      = Column(SAEnum(StatusEnum), default=StatusEnum.IDLE, nullable=False)
+    last_online = Column(DateTime, nullable=False)
+    status      = Column(SAEnum(StatusEnum), nullable=False)
     robot_id    = Column(String, ForeignKey("robots.id"), nullable=False)
-    robot       = relationship("Robot")
 
-# ——— DB setup ———————————————————————————————
-DATABASE_URL = "sqlite:///./robots.db"
-engine       = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
-Session      = sessionmaker(bind=engine)
-Base.metadata.create_all(engine)
-
-# ——— CLI + prompt loop —————————————————————————
+# default database (can be monkeypatched in tests)
+engine = create_engine("sqlite:///module.db")
+Session = sessionmaker(bind=engine)
 
 def main():
     if len(sys.argv) != 2:
-        print(f"Usage: {sys.argv[0]} <module_uuid>")
+        print("Usage: module <module_id>")
         sys.exit(1)
 
-    module_uuid = str(uuid.UUID(sys.argv[1]))
-    session     = Session()
+    module_id = sys.argv[1]
+    session = Session()
 
-    module = session.query(Module).filter_by(id=module_uuid).first()
-    if not module:
-        print(f"ERROR: module {module_uuid} not found.")
+    module_obj = session.query(Module).filter_by(id=module_id).first()
+    if not module_obj:
+        print(f"ERROR: module {module_id} not found.")
         session.close()
         sys.exit(1)
 
-    robot = session.query(Robot).filter_by(id=module.robot_id).first()
-    if not robot:
-        print(f"ERROR: robot {module.robot_id} not found.")
+    robot_obj = session.query(Robot).filter_by(id=module_obj.robot_id).first()
+    if not robot_obj:
+        print(f"ERROR: robot {module_obj.robot_id} not found.")
         session.close()
         sys.exit(1)
 
-    print(f"Module {module.id} ({module.name}) current status: {module.status.value}")
-    print(f"→ sending updates to {robot.ip_address}:{robot.port}\n")
+    print(f"Module {module_obj.id} ({module_obj.name}) current status: {module_obj.status.value}")
+    print(f"→ sending updates to {robot_obj.ip_address}:{robot_obj.port}\n")
 
-    try:
-        while True:
-            status_str = input("Enter new status (RUNNING, IDLE, FAILED): ").strip().upper()
-            if status_str not in StatusEnum.__members__:
-                print("Invalid status. Choose one of:", ", ".join(StatusEnum.__members__))
-                continue
+    while True:
+        try:
+            raw = input("Enter new status (RUNNING, IDLE, FAILED): ")
+        except KeyboardInterrupt:
+            print("\nExiting.")
+            break
 
-            new_status = StatusEnum[status_str]
-            module.status      = new_status
-            module.last_online = datetime.now(timezone.utc).replace(microsecond=0)
-            session.commit()
+        if not isinstance(raw, str):
+            print("\nExiting.")
+            break
 
-            # build and send JSON over TCP
-            payload = {"module_id": module.id, "status": module.status.name}
-            data    = json.dumps(payload).encode("utf-8")
-            try:
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                    sock.connect((robot.ip_address, robot.port))
-                    sock.sendall(data)
-            except Exception as exc:
-                print(f"Error sending to robot: {exc}")
+        status_str = raw.strip().upper()
+        if status_str not in [s.value for s in StatusEnum]:
+            print(f"Invalid status. Choose one of: {', '.join([s.value for s in StatusEnum])}")
+            continue
 
-            print(
-                f"Updated → status={module.status.value}, "
-                f"last_online={module.last_online.isoformat()}\n"
-                f"Sent → {payload}"
-            )
+        module_obj.status = StatusEnum(status_str)
+        module_obj.last_online = datetime.now(timezone.utc)
+        session.commit()
+        print(f"Updated → status={module_obj.status.value}, last_online={module_obj.last_online.isoformat()}")
 
-    except KeyboardInterrupt:
-        print("\nExiting.")
-    finally:
-        session.close()
+        payload = {"module_id": module_obj.id, "status": module_obj.status.value}
+        with socket.socket() as sock:
+            sock.connect((robot_obj.ip_address, robot_obj.port))
+            sock.sendall(json.dumps(payload).encode("utf-8"))
+            print(f"Sent → {payload}")
+
+    session.close()
+    return
 
 if __name__ == "__main__":
     main()
