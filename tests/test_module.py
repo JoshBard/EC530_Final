@@ -40,7 +40,6 @@ def in_memory_db(monkeypatch):
     monkeypatch.setattr(module, "Session", Session)
     module.Base.metadata.create_all(eng)
     yield
-    # no explicit teardown needed
 
 def test_usage_no_args(monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", ["prog"])

@@ -55,7 +55,6 @@ class Module(Base):
     robot_id    = Column(String, ForeignKey("robots.id"), nullable=False)
     robot       = relationship("Robot", back_populates="modules")
 
-# DB setup
 DATABASE_URL = "sqlite:///./robots.db"
 engine       = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 Session      = sessionmaker(bind=engine)
@@ -103,8 +102,6 @@ def handle_client(conn, robot_id):
     try:
         msg       = json.loads(raw.decode())
         module_id = msg["module_id"]
-        # incoming status is only used to trigger check/alert,
-        # the module row itself is updated by module.py
         incoming_status = StatusEnum[msg["status"]]
     except Exception:
         sess.close()
