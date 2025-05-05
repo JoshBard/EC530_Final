@@ -1,14 +1,16 @@
-name: Python CI
+name: Python TEST
 
 on:
   push:
     branches: [ main ]
     paths:
       - 'test/**'
+      - '**.py'
   pull_request:
     branches: [ main ]
     paths:
       - 'test/**'
+      - '**.py'
   workflow_dispatch:
 
 jobs:
