@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, clear_mappers
 
-from .. import module
+import module
 
 class DummyConn:
     def __init__(self, data: bytes):

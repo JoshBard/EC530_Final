@@ -1,5 +1,3 @@
-# tests/test_cli.py
-
 import builtins
 import getpass
 import pytest
@@ -7,8 +5,8 @@ import pytest
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import sessionmaker
 
-from .. import module_creator
-from .. import robot_creator
+import module_creator
+import robot_creator
 
 @pytest.fixture(autouse=True)
 def in_memory_dbs(monkeypatch):

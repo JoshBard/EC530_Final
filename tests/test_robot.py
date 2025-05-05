@@ -1,12 +1,10 @@
-# tests/test_robot.py
-
 import json
 from datetime import datetime, timezone
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from .. import robot
+import robot
 
 class DummyConn:
     def __init__(self, data: bytes):
