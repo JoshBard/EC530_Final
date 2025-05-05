@@ -46,7 +46,7 @@ class Module(Base):
     robot_id    = Column(String, ForeignKey("robots.id"), nullable=False)
 
 # default database (can be monkeypatched in tests)
-engine = create_engine("sqlite:///module.db")
+engine = create_engine("sqlite:///robots.db")
 Session = sessionmaker(bind=engine)
 
 def main():
